@@ -7,5 +7,5 @@ export const config = {
   mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27017/discharge-summary-db',
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
-  geminiApiKey: process.env.GEMINI_API_KEY || '',
+  sarvamApiKey: process.env.SARVAM_API_KEY || '',
 };

@@ -2,60 +2,78 @@ import { config } from '../config/index.js';
 import { validateDischargeJson } from '../ai/dischargeSchema.js';
 import { renderDischargeHtml } from '../ai/renderDischargeHtml.js';
 
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
-const PROMPT_VERSION = '1';
+const SARVAM_URL = 'https://api.sarvam.ai/v1/chat/completions';
+const SARVAM_MODEL = 'sarvam-m';
+const PROMPT_VERSION = '2';
 
 /**
- * Call Gemini API to enhance discharge draft text. Returns null on missing key or API error.
+ * Call Sarvam API to enhance discharge draft text. Returns null on missing key or API error.
  */
-async function callGemini(prompt) {
-  const apiKey = config.geminiApiKey?.trim();
+async function callSarvam(prompt) {
+  const apiKey = config.sarvamApiKey?.trim();
   if (!apiKey) return null;
   try {
-    const res = await fetch(`${GEMINI_URL}?key=${encodeURIComponent(apiKey)}`, {
+    const res = await fetch(SARVAM_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}` // Use Bearer token for Sarvam
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 8192 },
+        model: SARVAM_MODEL,
+        messages: [{ role: 'user', content: prompt }], // OpenAI format
+        temperature: 0.2,
+        max_tokens: 2048, // Adjusted for Sarvam, ensure this is within limits
       }),
     });
     if (!res.ok) {
       const err = await res.text();
-      console.error('Gemini API error:', res.status, err);
+      console.error('Sarvam API error:', res.status, err);
       return null;
     }
     const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    // Parse OpenAI-style response
+    const text = data?.choices?.[0]?.message?.content?.trim();
     return text || null;
   } catch (e) {
-    console.error('Gemini request failed:', e.message);
+    console.error('Sarvam request failed:', e.message);
     return null;
   }
 }
 
 /**
- * Call Gemini with JSON-only instruction. Returns raw text or null.
+ * Call Sarvam with JSON-only instruction. Returns raw text or null.
  */
-async function callGeminiJson(systemRule, userPrompt) {
-  const apiKey = config.geminiApiKey?.trim();
+async function callSarvamJson(systemRule, userPrompt) {
+  const apiKey = config.sarvamApiKey?.trim();
   if (!apiKey) return null;
   try {
-    const fullPrompt = `${systemRule}\n\n${userPrompt}`;
-    const res = await fetch(`${GEMINI_URL}?key=${encodeURIComponent(apiKey)}`, {
+    const res = await fetch(SARVAM_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: fullPrompt }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 8192 },
+        model: SARVAM_MODEL,
+        messages: [
+          { role: 'system', content: systemRule },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.2,
+        max_tokens: 4096,
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const err = await res.text();
+      console.error('Sarvam JSON request failed:', res.status, err);
+      return null;
+    }
     const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    const text = data?.choices?.[0]?.message?.content?.trim();
     return text || null;
   } catch (e) {
-    console.error('Gemini JSON request failed:', e.message);
+    console.error('Sarvam JSON request failed:', e.message);
     return null;
   }
 }
@@ -192,7 +210,7 @@ export async function generateDischargeJson(aiInput) {
   const userPrompt = `Input Data for Discharge Summary:\n\n${inputData}\n\nTask: Organize and enhance this data into the specified JSON structure. Preserve all clinical details exactly.`;
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const text = await callGeminiJson(JSON_SYSTEM_RULE, userPrompt);
+    const text = await callSarvamJson(JSON_SYSTEM_RULE, userPrompt);
     const parsed = parseJsonFromResponse(text);
     if (parsed && typeof parsed === 'object') {
       // Filter out noisy missing fields (e.g. specific array indices)
@@ -213,7 +231,7 @@ export async function generateDischargeJson(aiInput) {
  */
 export async function enhanceDischargeWithAI({ dischargeData, template }) {
   const draft = dischargeData?.doctorDraftText?.trim() || '';
-  const apiKey = config.geminiApiKey?.trim();
+  const apiKey = config.sarvamApiKey?.trim();
   const hasData = draft || Object.values(dischargeData || {}).some(v => v && String(v).length > 0);
 
   if (apiKey && hasData) {
@@ -238,7 +256,7 @@ export async function enhanceDischargeWithAI({ dischargeData, template }) {
 
     // Retry: try JSON generation one more time with a simplified prompt
     const retryPrompt = `Structure this discharge data into JSON. Use ONLY the data provided. Do NOT invent or add anything.\n\nPatient: ${dischargeData.patientName || ''}, UHID: ${dischargeData.uhid || ''}, IPID: ${dischargeData.ipid || ''}, Age: ${dischargeData.age || ''}, Gender: ${dischargeData.gender || ''}, Mobile: ${dischargeData.mobile || ''}\nAdmission: ${dischargeData.admissionDate || ''}, Discharge: ${dischargeData.dischargeDate || ''}, Department: ${dischargeData.department || ''}, Consultant: ${dischargeData.consultant || ''}, Ward: ${dischargeData.wardBed || ''}\nDiagnosis: Provisional=${dischargeData.provisionalDiagnosis || ''}, Final=${dischargeData.finalDiagnosis || ''}, ICD10=${(dischargeData.icd10Codes || []).join(', ')}\n\nDraft text:\n${draft}`;
-    const retryText = await callGeminiJson(JSON_SYSTEM_RULE, retryPrompt);
+    const retryText = await callSarvamJson(JSON_SYSTEM_RULE, retryPrompt);
     const retryParsed = parseJsonFromResponse(retryText);
     if (retryParsed && typeof retryParsed === 'object') {
       const retryValidated = validateDischargeJson(retryParsed);
@@ -505,7 +523,7 @@ function formatParagraphHtml(title, body) {
  * Accepts diagnosis strings and optional context. Returns array of { code, description }.
  */
 export async function suggestIcd10Codes({ provisionalDiagnosis, finalDiagnosis, clinicalDetails }) {
-  const apiKey = config.geminiApiKey?.trim();
+  const apiKey = config.sarvamApiKey?.trim();
   if (!apiKey) return { codes: [], error: 'AI service unavailable (no API key)' };
 
   const diagParts = [
@@ -532,7 +550,7 @@ Example output:
 
   const userPrompt = `Generate ICD-10 codes for the following patient diagnoses:\n\n${diagParts}`;
 
-  const rawText = await callGeminiJson(systemPrompt, userPrompt);
+  const rawText = await callSarvamJson(systemPrompt, userPrompt);
   const parsed = parseJsonFromResponse(rawText);
 
   if (Array.isArray(parsed) && parsed.length > 0) {
