@@ -63,57 +63,10 @@ async function seed() {
   }
   console.log('Users: 1 admin,', userIds.doctors.length, 'doctors,', userIds.chiefs.length, 'chiefs.');
 
-  // 3) Remove all discharge summaries, then seed 10 big-case patients
+  // 3) Remove all discharge summaries (clean slate)
   const deleted = await DischargeSummary.deleteMany({});
   console.log('Removed', deleted.deletedCount, 'existing discharge summaries.');
-
-  const bigCaseRecords = getBigCaseRecords();
-  const templateId = templateIds[0];
-  const doctorIds = userIds.doctors;
-  const baseDate = new Date();
-  baseDate.setDate(baseDate.getDate() - 14);
-
-  for (let i = 0; i < bigCaseRecords.length; i++) {
-    const rec = bigCaseRecords[i];
-    const status = BIG_CASE_STATUSES[i];
-    const createdBy = doctorIds[i % doctorIds.length];
-
-    const doc = {
-      ...rec,
-      status,
-      templateId,
-      templateVersion: '1.0.0',
-      createdBy,
-    };
-
-    const fullSummaryText = getSummaryTextForRecord(rec);
-    if (status !== 'DRAFT' && status !== 'REJECTED') {
-      doc.doctorDraftText = fullSummaryText;
-      doc.aiEnhancedText = fullSummaryText;
-      const aiEnhancedJson = getAiEnhancedJsonForRecord(rec);
-      doc.aiEnhancedJson = aiEnhancedJson;
-      doc.renderedHtml = renderDischargeHtml(aiEnhancedJson);
-      doc.missingFields = [];
-      doc.warnings = [];
-      doc.aiMeta = { model: 'seed', promptVersion: '1', generatedAt: new Date(baseDate.getTime() + i * 86400000) };
-    }
-    if (status === 'PENDING_APPROVAL' || status === 'CHIEF_EDITED' || status === 'APPROVED') {
-      doc.submittedAt = new Date(baseDate.getTime() + i * 86400000);
-    }
-    if (status === 'CHIEF_EDITED' || status === 'APPROVED') {
-      doc.chiefEditedText = fullSummaryText;
-      doc.chiefEditedAt = new Date(baseDate.getTime() + i * 86400000 + 3600000);
-    }
-    if (status === 'APPROVED') {
-      doc.finalVerifiedText = fullSummaryText;
-      doc.approvedAt = new Date(baseDate.getTime() + i * 86400000 + 7200000);
-    }
-
-    await DischargeSummary.create(doc);
-  }
-  const firstUhid = bigCaseRecords[0]?.uhid || '—';
-  const lastUhid = bigCaseRecords[bigCaseRecords.length - 1]?.uhid || '—';
-  console.log('Seeded', bigCaseRecords.length, 'big-case discharge summaries (' + firstUhid + '–' + lastUhid + ') with structured JSON and rendered HTML.');
+  console.log('Skipping dummy discharge summaries seeding as requested.');
 
   await mongoose.disconnect();
   console.log('Seed done.');

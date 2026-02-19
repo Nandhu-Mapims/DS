@@ -760,38 +760,10 @@ export function getBigCaseRecords() {
 }
 
 /** Status distribution for 20 big-case records: mix of workflow stages */
-export const BIG_CASE_STATUSES = [
-  'DRAFT',
-  'DRAFT',
-  'AI_ENHANCED',
-  'AI_ENHANCED',
-  'PENDING_APPROVAL',
-  'PENDING_APPROVAL',
-  'PENDING_APPROVAL',
-  'CHIEF_EDITED',
-  'CHIEF_EDITED',
-  'APPROVED',
-  'APPROVED',
-  'APPROVED',
-  'APPROVED',
-  'APPROVED',
-  'APPROVED',
-  'APPROVED',
-  'APPROVED',
-  'APPROVED',
-  'APPROVED',
-  'REJECTED',
-];
+export const BIG_CASE_STATUSES = Array(20).fill('DRAFT');
 
-/** Status distribution: draft, ai_enhanced, pending, chief_edited, approved, rejected */
-export const STATUS_DISTRIBUTION = [
-  'DRAFT', 'DRAFT', 'DRAFT', 'DRAFT', 'DRAFT',
-  'AI_ENHANCED', 'AI_ENHANCED', 'AI_ENHANCED',
-  'PENDING_APPROVAL', 'PENDING_APPROVAL', 'PENDING_APPROVAL', 'PENDING_APPROVAL',
-  'CHIEF_EDITED', 'CHIEF_EDITED', 'CHIEF_EDITED',
-  'APPROVED', 'APPROVED', 'APPROVED', 'APPROVED', 'APPROVED', 'APPROVED', 'APPROVED', 'APPROVED',
-  'REJECTED', 'REJECTED', 'REJECTED',
-];
+/** Status distribution: draft only */
+export const STATUS_DISTRIBUTION = ['DRAFT'];
 
 /**
  * Parse medications string into array of { name, dose, route, frequency, duration, notes }.

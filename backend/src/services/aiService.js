@@ -2,7 +2,7 @@ import { config } from '../config/index.js';
 import { validateDischargeJson } from '../ai/dischargeSchema.js';
 import { renderDischargeHtml } from '../ai/renderDischargeHtml.js';
 
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 const PROMPT_VERSION = '1';
 
 /**
@@ -140,8 +140,8 @@ Use exactly these top-level keys:
 - admission (object: admissionDate, dischargeDate, department, dischargeCondition, consultant, wardBed)
 - diagnoses (object: provisional, final, icd10Codes array)
 - reasonForAdmission (string: detailed paragraph. MUST start with "Mr./Mrs. [Name], a [Age]-year-old [Gender]..." followed by presenting complaints and history in full sentences.)
-- clinicalExamination (string: comprehensive narrative of clinical findings, expanding vitals and systemic exam into full sentences.)
-- significantFindings (string: detailed description of other significant findings.)
+- clinicalExamination (string: Narrative of clinical findings ON ADMISSION. Include general survey and admission vitals.)
+- significantFindings (string: Must contain two sections. First, "*Systemic Review*:" covering relevant history (e.g. diabetes, hypertension) and systemic examination (CNS, CVS, Abdomen). Second, "*Vital Signs Summary*:" detailing BP, HR, SpO2 trends throughout the stay.)
 - hospitalCourse (string: detailed, multi-sentence narrative of the stay. Expand brief events into a professional medical story of the patient's progress.)
 - procedures (array of objects: date, name, indicationOutcome)
 - investigations (array of objects: name, resultAdmission, resultDischarge, referenceRange)
@@ -330,7 +330,59 @@ export function enhanceDischarge({ dischargeData, template }) {
 
   const enhancedText = parts.join('\n\n---\n\n');
   const renderedHtml = formatDocumentHtml(partsForHtml, layout, template?.defaultCss, !!template?.sections?.some((s) => s.display === 'table'));
-  return { enhancedText, renderedHtml };
+
+  // Create fallback JSON structure for frontend editing if AI fails
+  const aiEnhancedJson = {
+    patient: {
+      uhid: dischargeData.uhid,
+      ipid: dischargeData.ipid,
+      name: dischargeData.patientName,
+      age: dischargeData.age,
+      gender: dischargeData.gender,
+      mobile: dischargeData.mobile,
+      address: dischargeData.address,
+    },
+    admission: {
+      admissionDate: dischargeData.admissionDate,
+      dischargeDate: dischargeData.dischargeDate,
+      department: dischargeData.department,
+      consultant: dischargeData.consultant,
+      wardBed: dischargeData.wardBed,
+      dischargeCondition: dischargeData.dischargeCondition,
+    },
+    diagnoses: {
+      provisional: dischargeData.provisionalDiagnosis,
+      final: dischargeData.finalDiagnosis,
+      icd10Codes: Array.isArray(dischargeData.icd10Codes) ? dischargeData.icd10Codes : [],
+    },
+    reasonForAdmission: dischargeData.reasonForAdmission,
+    clinicalExamination: dischargeData.clinicalExamination,
+    significantFindings: dischargeData.significantFindings,
+    hospitalCourse: dischargeData.courseInHospital,
+    procedures: (Array.isArray(dischargeData.procedureList) && dischargeData.procedureList.length)
+      ? dischargeData.procedureList
+      : (dischargeData.procedures ? [{ name: dischargeData.procedures }] : []),
+    investigations: (Array.isArray(dischargeData.labResults) && dischargeData.labResults.length)
+      ? dischargeData.labResults.map(l => ({ name: l.investigation, resultAdmission: l.resultAdmission, resultDischarge: l.resultDischarge, referenceRange: l.referenceRange }))
+      : (dischargeData.investigations ? [{ name: dischargeData.investigations }] : []),
+    imagingReports: dischargeData.imagingReports,
+    medications: (Array.isArray(dischargeData.medicationList) && dischargeData.medicationList.length)
+      ? dischargeData.medicationList
+      : (dischargeData.medications ? [{ name: dischargeData.medications }] : []),
+    medicalDevices: (Array.isArray(dischargeData.deviceList) && dischargeData.deviceList.length)
+      ? dischargeData.deviceList
+      : [],
+    instructions: {
+      advice: dischargeData.advice,
+      followUp: dischargeData.followUp,
+      redFlags: dischargeData.redFlags,
+    },
+    missingFields: [],
+    warnings: ['Note: Content generated from structured data (AI generation unavailable).'],
+    finalNarrativeText: enhancedText,
+  };
+
+  return { enhancedText, renderedHtml, aiEnhancedJson };
 }
 
 function getDefaultSections() {

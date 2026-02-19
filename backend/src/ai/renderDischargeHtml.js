@@ -34,7 +34,12 @@ function escapeHtml(s) {
 
 function para(text) {
   if (!text || !String(text).trim()) return '';
-  const safe = escapeHtml(String(text).trim()).replace(/\n/g, '</p><p>');
+  let safe = escapeHtml(String(text).trim());
+  // Render bold text: *bold* -> <strong>bold</strong>
+  // Also handle **bold** if the AI generates that
+  safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  safe = safe.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<strong>$1</strong>');
+  safe = safe.replace(/\n/g, '</p><p>');
   return `<p>${safe}</p>`;
 }
 
@@ -250,7 +255,15 @@ export function renderDischargeHtml(json) {
     // Imaging & Diagnostic Reports
     if (hasImaging) {
       html += '<div class="section-title">Imaging &amp; Diagnostic Reports</div><div class="content-text">';
-      html += para(json.imagingReports);
+      // Auto-bold headers like "Chest X-Ray:" or "USG Abdomen:"
+      // Looks for start of line, words/spaces/hyphens, followed by colon
+      let imgText = String(json.imagingReports || '');
+      // Regex explanation:
+      // (^|\n)      : Start of string or new line
+      // (?!.*     : Negative lookahead to ensure we don't double-bold if already bolded (simplified check)
+      // ([\w\s\-\(\)\/\.]+): : Capture the label (letters, spaces, hyphens, parens, slashes, dots) ending in colon
+      imgText = imgText.replace(/(^|\n)([\w\s\-\(\)\/\.]+):/g, '$1**$2:**');
+      html += para(imgText);
       html += '</div>';
     }
 
