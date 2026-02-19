@@ -19,10 +19,18 @@ import {
   createDraft,
   saveDraft,
   getDischarge,
+
   generateAIDraft,
   submitForApproval,
 } from '../../api/dischargeApi';
 import { dischargeFormSchema, defaultDischargeValues } from './dischargeSchema';
+import {
+  LabResultsArray,
+  ProceduresArray,
+  DevicesArray,
+  MedicationsArray,
+} from './DischargeFieldArrays';
+
 
 const SECTION_KEYS = [
   'patientProfile',
@@ -44,7 +52,7 @@ function useDebouncedSave(dischargeId, getValues, enabled) {
       try {
         await saveDraft(dischargeId, payload);
         lastSavedRef.current = new Date();
-      } catch (_) {}
+      } catch (_) { }
     },
     [dischargeId]
   );
@@ -120,7 +128,7 @@ export function DoctorCreateDischarge() {
             setAiEnhanced(!!d.aiEnhancedText);
           }
         })
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => setLoadingDraft(false));
     }
   }, [editId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -165,21 +173,64 @@ export function DoctorCreateDischarge() {
     [dischargeId, navigate, toast, lastSavedRef]
   );
 
-  const onGenerateAI = useCallback(() => {
-    if (!dischargeId) {
-      toast.warning('Save draft first');
+
+
+  /* AI Generation Handler: First handles form submission/saving, then triggers AI */
+  const handleGenerateAI = useCallback(async () => {
+    // We skip strict validation for AI generation, but ensure critical ID fields exist.
+    const values = getValues();
+    if (!values.uhid || !values.ipid) {
+      toast.error('UHID and IPID are required');
       return;
     }
+
     setGeneratingAI(true);
-    generateAIDraft(dischargeId)
-      .then(() => {
+    try {
+      let currentId = dischargeId;
+
+      // 1. Save or Create Draft
+      if (!currentId) {
+        // If no ID, create draft first
+        try {
+          const created = await createDraft(values);
+          currentId = created._id || created.id;
+          setDischargeId(currentId);
+          toast.success('Draft created');
+          // Update URL without reload
+          navigate(`/doctor/create?id=${currentId}`, { replace: true });
+        } catch (e) {
+          toast.error('Failed to create draft');
+          setGeneratingAI(false);
+          return;
+        }
+      } else {
+        // If ID exists, save updates
+        try {
+          await saveDraft(currentId, values);
+          lastSavedRef.current = new Date();
+          setSavedAt(lastSavedRef.current);
+        } catch (e) {
+          console.error('Save failed before AI', e);
+        }
+      }
+
+      // 2. Trigger AI
+      if (currentId) {
+        toast.info('Generating AI Draft...');
+        await generateAIDraft(currentId);
         setAiEnhanced(true);
-        toast.success('AI draft generated');
-        navigate(`/doctor/preview/${dischargeId}`);
-      })
-      .catch(() => {})
-      .finally(() => setGeneratingAI(false));
-  }, [dischargeId, navigate, toast]);
+        toast.success('AI Draft Generated!');
+        // 3. Navigate to Preview
+        navigate(`/doctor/preview/${currentId}`);
+      }
+
+    } catch (error) {
+      console.error("AI Generation error", error);
+      toast.error('AI Generation failed');
+    } finally {
+      setGeneratingAI(false);
+    }
+  }, [dischargeId, getValues, navigate, toast, lastSavedRef]);
 
   const onSubmitForApproval = useCallback(() => {
     if (!dischargeId) {
@@ -225,7 +276,7 @@ export function DoctorCreateDischarge() {
       <PageHeader
         breadcrumbs={[{ to: '/', label: 'Home' }, { to: '/doctor', label: 'My Summaries' }, { label: 'Create' }]}
         title="Create Discharge Summary"
-        description="Fill all sections, then: Save draft → Generate AI draft → Preview & submit for approval."
+        description="Fill all sections, then: Save draft → Submit for approval."
         action={
           <>
             {savedAt && (
@@ -402,16 +453,29 @@ export function DoctorCreateDischarge() {
               </Accordion.Header>
               <Accordion.Body>
                 <Form.Group className="mb-3">
-                  <Form.Label>Laboratory Investigations</Form.Label>
-                  <Form.Control {...register('investigations')} as="textarea" rows={3} placeholder="Lab results, imaging & diagnostic reports" className="ds-focus-ring" />
+                  <LabResultsArray />
+                  <Form.Group className="mb-3">
+                    <Form.Label>Imaging &amp; Diagnostic Reports</Form.Label>
+                    <Form.Control
+                      {...register('imagingReports')}
+                      as="textarea"
+                      rows={3}
+                      placeholder="e.g. USG Abdomen: Mild hepatomegaly. Chest X-Ray: Clear lung fields."
+                      className="ds-focus-ring"
+                    />
+                  </Form.Group>
+                  <Form.Label className="text-muted small">Legacy Text (Optional)</Form.Label>
+                  <Form.Control {...register('investigations')} as="textarea" rows={3} placeholder="Lab results (Text backup)" className="ds-focus-ring" />
                 </Form.Group>
                 <Form.Group className="mb-3">
                   <Form.Label>Treatment given</Form.Label>
                   <Form.Control {...register('treatment')} as="textarea" rows={2} placeholder="Treatment during stay" className="ds-focus-ring" />
                 </Form.Group>
                 <Form.Group>
-                  <Form.Label>Procedures Performed</Form.Label>
-                  <Form.Control {...register('procedures')} as="textarea" rows={2} placeholder="Date, procedure name, indication & outcome" className="ds-focus-ring" />
+                  <ProceduresArray />
+                  <DevicesArray />
+                  <Form.Label className="text-muted small">Legacy Text (Optional)</Form.Label>
+                  <Form.Control {...register('procedures')} as="textarea" rows={2} placeholder="Date, procedure name, indication & outcome (Text backup)" className="ds-focus-ring" />
                 </Form.Group>
               </Accordion.Body>
             </Accordion.Item>
@@ -427,8 +491,9 @@ export function DoctorCreateDischarge() {
                   <Form.Control {...register('dischargeCondition')} as="textarea" rows={2} placeholder="Clinical status at discharge" className="ds-focus-ring" />
                 </Form.Group>
                 <Form.Group className="mb-3">
-                  <Form.Label>Discharge Medications</Form.Label>
-                  <Form.Control {...register('medications')} as="textarea" rows={3} placeholder="Medication name, dosage, frequency, duration, instructions" className="ds-focus-ring" />
+                  <MedicationsArray />
+                  <Form.Label className="text-muted small">Legacy Text (Optional)</Form.Label>
+                  <Form.Control {...register('medications')} as="textarea" rows={3} placeholder="Medication name, dosage, frequency, duration, instructions (Text backup)" className="ds-focus-ring" />
                 </Form.Group>
                 <Form.Group className="mb-3">
                   <Form.Label>Follow-up Advice</Form.Label>
@@ -465,11 +530,11 @@ export function DoctorCreateDischarge() {
               <SubmitButton
                 type="button"
                 variant="outline-info"
-                onClick={onGenerateAI}
-                disabled={!dischargeId}
+                onClick={handleGenerateAI}
                 loading={generatingAI}
+                className="d-flex align-items-center gap-2"
               >
-                Generate AI Draft
+                ✨ Generate AI Draft
               </SubmitButton>
               <SubmitButton
                 type="button"

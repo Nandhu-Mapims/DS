@@ -85,10 +85,13 @@ export async function submitForApproval(id, payload = {}) {
 }
 
 /**
- * Update doctor-edited text (aiEnhancedText override) on preview screen
+ * Update doctor-edited text (aiEnhancedText override) on preview screen.
+ * Also sends aiEnhancedJson if the doctor edited structured fields.
  */
-export async function updateDoctorEditedText(id, doctorEditedText) {
-  const res = await api.patch(`${DISCHARGE_BASE}/${id}`, { doctorEditedText });
+export async function updateDoctorEditedText(id, doctorEditedText, aiEnhancedJson) {
+  const payload = { doctorEditedText };
+  if (aiEnhancedJson) payload.aiEnhancedJson = aiEnhancedJson;
+  const res = await api.patch(`${DISCHARGE_BASE}/${id}`, payload);
   return unwrap(res);
 }
 
@@ -141,5 +144,15 @@ export async function downloadDischargePdf(id) {
  */
 export async function resendWhatsApp(id) {
   const res = await api.post(`${DISCHARGE_BASE}/${id}/whatsapp`);
+  return unwrap(res);
+}
+
+/**
+ * AI-powered ICD-10 code suggestion.
+ * @param {{ provisionalDiagnosis?: string, finalDiagnosis?: string, clinicalDetails?: string }} payload
+ * @returns {Promise<{ codes: Array<{ code: string, description: string }> }>}
+ */
+export async function suggestIcd10Codes(payload) {
+  const res = await api.post(`${DISCHARGE_BASE}/suggest-icd10`, payload);
   return unwrap(res);
 }

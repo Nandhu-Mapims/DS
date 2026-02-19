@@ -36,6 +36,39 @@ export const dischargeFormSchema = yup.object({
   advice: yup.string().trim(),
   followUp: yup.string().trim(),
   redFlags: yup.string().trim(),
+  // Structured Lists
+  labResults: yup.array().of(
+    yup.object().shape({
+      investigation: yup.string(),
+      resultAdmission: yup.string(),
+      resultDischarge: yup.string(),
+      referenceRange: yup.string(),
+    })
+  ).default([]),
+  procedureList: yup.array().of(
+    yup.object().shape({
+      date: yup.string(),
+      name: yup.string(),
+      indicationOutcome: yup.string(),
+    })
+  ).default([]),
+  deviceList: yup.array().of(
+    yup.object().shape({
+      deviceType: yup.string(),
+      model: yup.string(),
+      location: yup.string(),
+      implantDate: yup.string(),
+    })
+  ).default([]),
+  medicationList: yup.array().of(
+    yup.object().shape({
+      name: yup.string(),
+      dosage: yup.string(),
+      frequency: yup.string(),
+      duration: yup.string(),
+      instructions: yup.string(),
+    })
+  ).default([]),
 });
 
 export const defaultDischargeValues = {
@@ -63,4 +96,8 @@ export const defaultDischargeValues = {
   advice: '',
   followUp: '',
   redFlags: '',
+  labResults: [],
+  procedureList: [],
+  deviceList: [],
+  medicationList: [],
 };
